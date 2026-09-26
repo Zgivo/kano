@@ -6,6 +6,23 @@ const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 export const supabase = url && anonKey ? createClient(url, anonKey) : null;
 
+export async function signUpWithEmail(name: string, email: string, password: string) {
+  if (!supabase) return { data: null, error: new Error("Supabase is not configured yet.") };
+  return supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: { full_name: name.trim() || email.split("@")[0] },
+      emailRedirectTo: window.location.origin,
+    },
+  });
+}
+
+export async function signInWithEmail(email: string, password: string) {
+  if (!supabase) return { data: null, error: new Error("Supabase is not configured yet.") };
+  return supabase.auth.signInWithPassword({ email, password });
+}
+
 export async function signInWithGoogle() {
   if (!supabase) return { error: new Error("Supabase is not configured yet.") };
   return supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.origin } });
