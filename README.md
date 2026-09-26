@@ -13,7 +13,7 @@ KANO is a modern Japanese kana learning platform designed to make memorizing Hir
 - Nine interactive practice modes, immediate feedback, and keyboard controls
 - Weighted adaptive practice based on mastery, errors, recency, and speed
 - Searchable mastery map, statistics, XP, streaks, goals, and achievements
-- Guest mode with persistent local progress and optional Supabase auth
+- Guest mode with persistent local progress and Supabase email authentication
 - Separate progress, statistics, goals, and mastery data for every signed-in user
 - Responsive light and dark interfaces
 
@@ -41,12 +41,12 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 
 1. Create a Supabase project.
 2. Run `supabase/schema.sql` in the SQL editor.
-3. Enable Google authentication and add callback URLs.
-4. Seed the `kana` table from `data/kana.ts` when enabling cloud sync.
+3. Enable email authentication and add your site to the allowed redirect URLs.
+4. Apply the migrations in `supabase/migrations`.
 
 ## Personal progress
 
-Guest progress is stored only in the current browser. Google sign-in creates a
+Guest progress is stored only in the current browser. Email sign-in creates a
 separate profile keyed by the Supabase user ID and synchronizes that user's
 progress through the protected `profiles.progress_data` field. Row-level
 security prevents users from reading or changing another account's data.
@@ -69,7 +69,7 @@ Every answer updates a 0–100 mastery score. Correct, fast answers raise master
 
 ## Roadmap
 
-- Cloud progress synchronization
+- Password recovery and additional sign-in providers
 - Dakuten, handakuten, and yōon modules
 - Vocabulary and JLPT N5 tracks
 - Recorded native-speaker audio
