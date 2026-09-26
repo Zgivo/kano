@@ -1,6 +1,7 @@
 create type kana_alphabet as enum ('hiragana', 'katakana');
 create type mastery_status as enum ('new', 'learning', 'familiar', 'strong', 'mastered');
-create table profiles (id uuid primary key references auth.users(id) on delete cascade, username text not null, avatar_url text, xp integer not null default 0, daily_goal integer not null default 15, created_at timestamptz not null default now());
+create table profiles (id uuid primary key references auth.users(id) on delete cascade, username text not null, avatar_url text, xp integer not null default 0, daily_goal integer not null default 15, progress_data jsonb not null default '{}'::jsonb, created_at timestamptz not null default now());
+alter table profiles add column if not exists progress_data jsonb not null default '{}'::jsonb;
 create table kana (id text primary key, character text not null, romaji text not null, alphabet kana_alphabet not null, group_name text not null, sort_order integer not null, pronunciation text not null, example_word text not null, example_reading text not null, meaning text not null);
 create table lessons (id bigint generated always as identity primary key, alphabet kana_alphabet not null, title text not null, sort_order integer not null);
 create table lesson_progress (user_id uuid references profiles(id) on delete cascade, lesson_id bigint references lessons(id) on delete cascade, status text not null default 'locked', completed_at timestamptz, primary key(user_id, lesson_id));
@@ -13,3 +14,7 @@ create table streaks (user_id uuid primary key references profiles(id) on delete
 alter table profiles enable row level security; alter table user_kana_progress enable row level security; alter table lesson_progress enable row level security; alter table practice_sessions enable row level security; alter table practice_answers enable row level security; alter table user_achievements enable row level security; alter table streaks enable row level security;
 create policy "users own profile" on profiles for all using (auth.uid() = id) with check (auth.uid() = id);
 create policy "users own kana progress" on user_kana_progress for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "users own lesson progress" on lesson_progress for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "users own sessions" on practice_sessions for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "users own achievements" on user_achievements for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "users own streak" on streaks for all using (auth.uid() = user_id) with check (auth.uid() = user_id);

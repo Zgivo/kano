@@ -1,8 +1,6 @@
 "use client";
 
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
-import { hiragana, katakana } from "@/data/kana";
 
 export type KanaProgress = {
   mastery: number;
@@ -13,7 +11,7 @@ export type KanaProgress = {
   status: "new" | "learning" | "familiar" | "strong" | "mastered";
 };
 
-type KanoState = {
+export type ProgressSnapshot = {
   name: string;
   xp: number;
   streak: number;
@@ -24,6 +22,13 @@ type KanoState = {
   studySeconds: number;
   progress: Record<string, KanaProgress>;
   onboardingComplete: boolean;
+};
+
+type KanoState = ProgressSnapshot & {
+  identityKey: string;
+  hydrated: boolean;
+  loadIdentity: (identityKey: string, fallbackName?: string) => void;
+  hydrate: (snapshot: Partial<ProgressSnapshot>) => void;
   updateAnswer: (id: string, isCorrect: boolean, responseMs: number) => void;
   remember: (id: string) => void;
   setDailyGoal: (goal: number) => void;
@@ -40,34 +45,55 @@ const statusFor = (mastery: number, correct: number): KanaProgress["status"] => 
   return "new";
 };
 
-const seededProgress = [...hiragana.slice(0, 34), ...katakana.slice(0, 27)].reduce<Record<string, KanaProgress>>((result, item, index) => {
-  const mastery = [92, 96, 100, 94, 91, 88][index % 6];
-  result[item.id] = { mastery, correct: 12 + (index % 6), incorrect: index % 3, status: mastery >= 90 ? "mastered" : "strong", lastReviewed: new Date(Date.now() - index * 36e5).toISOString(), responseMs: 1450 + index * 23 };
-  return result;
-}, {});
-
-Object.assign(seededProgress, {
-  "katakana-shi": { mastery: 42, correct: 8, incorrect: 5, status: "learning", responseMs: 4300 },
-  "katakana-tsu": { mastery: 38, correct: 7, incorrect: 5, status: "learning", responseMs: 5100 },
-  "katakana-so": { mastery: 45, correct: 9, incorrect: 4, status: "learning", responseMs: 3900 },
-  "katakana-n": { mastery: 48, correct: 9, incorrect: 4, status: "learning", responseMs: 3700 },
+export const blankProgress = (name = "Learner"): ProgressSnapshot => ({
+  name,
+  xp: 0,
+  streak: 0,
+  dailyMinutes: 0,
+  dailyGoal: 15,
+  questions: 0,
+  correct: 0,
+  studySeconds: 0,
+  progress: {},
+  onboardingComplete: false,
 });
 
-const initial = {
-  name: "Mark",
-  xp: 1240,
-  streak: 7,
-  dailyMinutes: 12,
-  dailyGoal: 15,
-  questions: 32,
-  correct: 27,
-  studySeconds: 15 * 60,
-  progress: seededProgress,
-  onboardingComplete: false,
+const storageKey = (identityKey: string) => `kano-progress-v2:${identityKey}`;
+
+const readLocal = (identityKey: string, fallbackName?: string): ProgressSnapshot => {
+  const empty = blankProgress(fallbackName);
+  if (typeof window === "undefined") return empty;
+  try {
+    const saved = window.localStorage.getItem(storageKey(identityKey));
+    return saved ? { ...empty, ...JSON.parse(saved) } : empty;
+  } catch {
+    return empty;
+  }
 };
 
-export const useKanoStore = create<KanoState>()(persist((set) => ({
-  ...initial,
+export const selectProgressSnapshot = (state: KanoState): ProgressSnapshot => ({
+  name: state.name,
+  xp: state.xp,
+  streak: state.streak,
+  dailyMinutes: state.dailyMinutes,
+  dailyGoal: state.dailyGoal,
+  questions: state.questions,
+  correct: state.correct,
+  studySeconds: state.studySeconds,
+  progress: state.progress,
+  onboardingComplete: state.onboardingComplete,
+});
+
+export const useKanoStore = create<KanoState>()((set) => ({
+  ...blankProgress(),
+  identityKey: "guest",
+  hydrated: false,
+  loadIdentity: (identityKey, fallbackName) => set({
+    ...readLocal(identityKey, fallbackName),
+    identityKey,
+    hydrated: true,
+  }),
+  hydrate: (snapshot) => set((state) => ({ ...blankProgress(state.name), ...snapshot })),
   updateAnswer: (id, isCorrect, responseMs) => set((state) => {
     const current = state.progress[id] ?? { mastery: 0, correct: 0, incorrect: 0, status: "new" as const };
     const correct = current.correct + (isCorrect ? 1 : 0);
@@ -75,11 +101,13 @@ export const useKanoStore = create<KanoState>()(persist((set) => ({
     const speedBoost = responseMs < 3000 ? 2 : responseMs > 8000 ? -1 : 0;
     const change = isCorrect ? 8 + speedBoost : -10;
     const mastery = Math.max(0, Math.min(100, current.mastery + change));
+    const addedSeconds = Math.max(1, Math.round(responseMs / 1000));
     return {
       xp: state.xp + (isCorrect ? 5 : 0),
       questions: state.questions + 1,
       correct: state.correct + (isCorrect ? 1 : 0),
-      studySeconds: state.studySeconds + Math.max(1, Math.round(responseMs / 1000)),
+      studySeconds: state.studySeconds + addedSeconds,
+      dailyMinutes: Math.floor((state.studySeconds + addedSeconds) / 60),
       progress: { ...state.progress, [id]: { mastery, correct, incorrect, responseMs, lastReviewed: new Date().toISOString(), status: statusFor(mastery, correct) } },
     };
   }),
@@ -91,5 +119,12 @@ export const useKanoStore = create<KanoState>()(persist((set) => ({
   setDailyGoal: (dailyGoal) => set({ dailyGoal }),
   setName: (name) => set({ name }),
   completeOnboarding: () => set({ onboardingComplete: true }),
-  reset: () => set(initial),
-}), { name: "kano-progress-v1" }));
+  reset: () => set((state) => ({ ...blankProgress(state.name), identityKey: state.identityKey, hydrated: true })),
+}));
+
+if (typeof window !== "undefined") {
+  useKanoStore.subscribe((state) => {
+    if (!state.hydrated) return;
+    window.localStorage.setItem(storageKey(state.identityKey), JSON.stringify(selectProgressSnapshot(state)));
+  });
+}
