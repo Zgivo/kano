@@ -6,6 +6,7 @@ export type KanaProgress = {
   mastery: number;
   correct: number;
   incorrect: number;
+  unresolvedMistakes: number;
   lastReviewed?: string;
   responseMs?: number;
   status: "new" | "learning" | "familiar" | "strong" | "mastered";
@@ -95,9 +96,11 @@ export const useKanoStore = create<KanoState>()((set) => ({
   }),
   hydrate: (snapshot) => set((state) => ({ ...blankProgress(state.name), ...snapshot })),
   updateAnswer: (id, isCorrect, responseMs) => set((state) => {
-    const current = state.progress[id] ?? { mastery: 0, correct: 0, incorrect: 0, status: "new" as const };
+    const current = state.progress[id] ?? { mastery: 0, correct: 0, incorrect: 0, unresolvedMistakes: 0, status: "new" as const };
     const correct = current.correct + (isCorrect ? 1 : 0);
     const incorrect = current.incorrect + (isCorrect ? 0 : 1);
+    const previousUnresolved = current.unresolvedMistakes ?? (current.incorrect > 0 ? 1 : 0);
+    const unresolvedMistakes = isCorrect ? 0 : previousUnresolved + 1;
     const speedBoost = responseMs < 3000 ? 2 : responseMs > 8000 ? -1 : 0;
     const change = isCorrect ? 8 + speedBoost : -10;
     const mastery = Math.max(0, Math.min(100, current.mastery + change));
@@ -108,11 +111,11 @@ export const useKanoStore = create<KanoState>()((set) => ({
       correct: state.correct + (isCorrect ? 1 : 0),
       studySeconds: state.studySeconds + addedSeconds,
       dailyMinutes: Math.floor((state.studySeconds + addedSeconds) / 60),
-      progress: { ...state.progress, [id]: { mastery, correct, incorrect, responseMs, lastReviewed: new Date().toISOString(), status: statusFor(mastery, correct) } },
+      progress: { ...state.progress, [id]: { mastery, correct, incorrect, unresolvedMistakes, responseMs, lastReviewed: new Date().toISOString(), status: statusFor(mastery, correct) } },
     };
   }),
   remember: (id) => set((state) => {
-    const current = state.progress[id] ?? { mastery: 0, correct: 0, incorrect: 0, status: "new" as const };
+    const current = state.progress[id] ?? { mastery: 0, correct: 0, incorrect: 0, unresolvedMistakes: 0, status: "new" as const };
     const mastery = Math.min(100, current.mastery + 12);
     return { progress: { ...state.progress, [id]: { ...current, mastery, status: statusFor(mastery, current.correct) } } };
   }),
