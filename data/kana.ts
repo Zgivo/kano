@@ -11,6 +11,7 @@ export type Kana = {
   exampleWord: string;
   exampleReading: string;
   meaning: string;
+  isCombination: boolean;
 };
 
 type Row = { group: string; romaji: string[]; hiragana: string[]; katakana: string[] };
@@ -28,6 +29,30 @@ const rows: Row[] = [
   { group: "W-row", romaji: ["wa", "wo"], hiragana: ["わ", "を"], katakana: ["ワ", "ヲ"] },
   { group: "Final", romaji: ["n"], hiragana: ["ん"], katakana: ["ン"] },
 ];
+
+const combinationRows: Row[] = [
+  {
+    group: "K / S / CH combinations",
+    romaji: ["kya", "kyu", "kyo", "sha", "shu", "sho", "cha", "chu", "cho"],
+    hiragana: ["きゃ", "きゅ", "きょ", "しゃ", "しゅ", "しょ", "ちゃ", "ちゅ", "ちょ"],
+    katakana: ["キャ", "キュ", "キョ", "シャ", "シュ", "ショ", "チャ", "チュ", "チョ"],
+  },
+  {
+    group: "N / H / M / R combinations",
+    romaji: ["nya", "nyu", "nyo", "hya", "hyu", "hyo", "mya", "myu", "myo", "rya", "ryu", "ryo"],
+    hiragana: ["にゃ", "にゅ", "にょ", "ひゃ", "ひゅ", "ひょ", "みゃ", "みゅ", "みょ", "りゃ", "りゅ", "りょ"],
+    katakana: ["ニャ", "ニュ", "ニョ", "ヒャ", "ヒュ", "ヒョ", "ミャ", "ミュ", "ミョ", "リャ", "リュ", "リョ"],
+  },
+  {
+    group: "Voiced combinations",
+    romaji: ["gya", "gyu", "gyo", "ja", "ju", "jo", "bya", "byu", "byo", "pya", "pyu", "pyo"],
+    hiragana: ["ぎゃ", "ぎゅ", "ぎょ", "じゃ", "じゅ", "じょ", "びゃ", "びゅ", "びょ", "ぴゃ", "ぴゅ", "ぴょ"],
+    katakana: ["ギャ", "ギュ", "ギョ", "ジャ", "ジュ", "ジョ", "ビャ", "ビュ", "ビョ", "ピャ", "ピュ", "ピョ"],
+  },
+];
+
+const allRows = [...rows, ...combinationRows];
+const combinationReadings = new Set(combinationRows.flatMap((row) => row.romaji));
 
 const examples: Record<string, [string, string, string]> = {
   a: ["あさ", "asa", "morning"], i: ["いぬ", "inu", "dog"], u: ["うみ", "umi", "sea"], e: ["えき", "eki", "station"], o: ["おちゃ", "ocha", "tea"],
@@ -52,9 +77,12 @@ const katakanaExamples: Record<string, [string, string, string]> = {
 
 function buildAlphabet(alphabet: Alphabet): Kana[] {
   let order = 0;
-  return rows.flatMap((row) => row.romaji.map((romaji, index) => {
+  return allRows.flatMap((row) => row.romaji.map((romaji, index) => {
     const character = row[alphabet][index];
-    const sample = alphabet === "katakana" ? katakanaExamples[romaji] ?? examples[romaji] : examples[romaji];
+    const isCombination = combinationReadings.has(romaji);
+    const sample = isCombination
+      ? [character, romaji, "combined kana sound"]
+      : alphabet === "katakana" ? katakanaExamples[romaji] ?? examples[romaji] : examples[romaji];
     order += 1;
     return {
       id: `${alphabet}-${romaji}`,
@@ -67,6 +95,7 @@ function buildAlphabet(alphabet: Alphabet): Kana[] {
       exampleWord: sample[0],
       exampleReading: sample[1],
       meaning: sample[2],
+      isCombination,
     };
   }));
 }
@@ -74,8 +103,9 @@ function buildAlphabet(alphabet: Alphabet): Kana[] {
 export const kana: Kana[] = [...buildAlphabet("hiragana"), ...buildAlphabet("katakana")];
 export const hiragana = kana.filter((item) => item.alphabet === "hiragana");
 export const katakana = kana.filter((item) => item.alphabet === "katakana");
+export const combinationKana = kana.filter((item) => item.isCombination);
 
-export const lessonGroups = rows.map((row, index) => ({
+export const lessonGroups = allRows.map((row, index) => ({
   lesson: index + 1,
   group: row.group,
   hiragana: hiragana.filter((item) => item.group === row.group),
