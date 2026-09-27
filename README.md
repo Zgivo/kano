@@ -8,7 +8,7 @@ KANO is a modern Japanese kana learning platform designed to make memorizing Hir
 
 ## Features
 
-- Complete 46-character Hiragana and Katakana sets plus 33 yōon combinations per alphabet
+- Complete 46-character Hiragana and Katakana sets, 25 dakuon/handakuon, and 33 yōon combinations per alphabet
 - Progressive lessons with Learn → Practice → Test flow
 - Ten interactive practice modes, including a dedicated Combination Kana trainer
 - Weighted adaptive practice based on mastery, errors, recency, and speed

@@ -14,7 +14,8 @@ export type Kana = {
   isCombination: boolean;
 };
 
-type Row = { group: string; romaji: string[]; hiragana: string[]; katakana: string[] };
+type RowKind = "basic" | "dakuon" | "handakuon" | "combination";
+type Row = { group: string; romaji: string[]; hiragana: string[]; katakana: string[]; ids?: string[]; kind?: RowKind };
 
 const rows: Row[] = [
   { group: "Vowels", romaji: ["a", "i", "u", "e", "o"], hiragana: ["あ", "い", "う", "え", "お"], katakana: ["ア", "イ", "ウ", "エ", "オ"] },
@@ -30,29 +31,42 @@ const rows: Row[] = [
   { group: "Final", romaji: ["n"], hiragana: ["ん"], katakana: ["ン"] },
 ];
 
+const dakuonRows: Row[] = [
+  { group: "Dakuon · G-row", romaji: ["ga", "gi", "gu", "ge", "go"], hiragana: ["が", "ぎ", "ぐ", "げ", "ご"], katakana: ["ガ", "ギ", "グ", "ゲ", "ゴ"], kind: "dakuon" },
+  { group: "Dakuon · Z-row", romaji: ["za", "ji", "zu", "ze", "zo"], hiragana: ["ざ", "じ", "ず", "ぜ", "ぞ"], katakana: ["ザ", "ジ", "ズ", "ゼ", "ゾ"], kind: "dakuon" },
+  { group: "Dakuon · D-row", romaji: ["da", "ji", "zu", "de", "do"], ids: ["da", "dji", "dzu", "de", "do"], hiragana: ["だ", "ぢ", "づ", "で", "ど"], katakana: ["ダ", "ヂ", "ヅ", "デ", "ド"], kind: "dakuon" },
+  { group: "Dakuon · B-row", romaji: ["ba", "bi", "bu", "be", "bo"], hiragana: ["ば", "び", "ぶ", "べ", "ぼ"], katakana: ["バ", "ビ", "ブ", "ベ", "ボ"], kind: "dakuon" },
+];
+
+const handakuonRows: Row[] = [
+  { group: "Handakuon · P-row", romaji: ["pa", "pi", "pu", "pe", "po"], hiragana: ["ぱ", "ぴ", "ぷ", "ぺ", "ぽ"], katakana: ["パ", "ピ", "プ", "ペ", "ポ"], kind: "handakuon" },
+];
+
 const combinationRows: Row[] = [
   {
     group: "K / S / CH combinations",
     romaji: ["kya", "kyu", "kyo", "sha", "shu", "sho", "cha", "chu", "cho"],
     hiragana: ["きゃ", "きゅ", "きょ", "しゃ", "しゅ", "しょ", "ちゃ", "ちゅ", "ちょ"],
     katakana: ["キャ", "キュ", "キョ", "シャ", "シュ", "ショ", "チャ", "チュ", "チョ"],
+    kind: "combination",
   },
   {
     group: "N / H / M / R combinations",
     romaji: ["nya", "nyu", "nyo", "hya", "hyu", "hyo", "mya", "myu", "myo", "rya", "ryu", "ryo"],
     hiragana: ["にゃ", "にゅ", "にょ", "ひゃ", "ひゅ", "ひょ", "みゃ", "みゅ", "みょ", "りゃ", "りゅ", "りょ"],
     katakana: ["ニャ", "ニュ", "ニョ", "ヒャ", "ヒュ", "ヒョ", "ミャ", "ミュ", "ミョ", "リャ", "リュ", "リョ"],
+    kind: "combination",
   },
   {
     group: "Voiced combinations",
     romaji: ["gya", "gyu", "gyo", "ja", "ju", "jo", "bya", "byu", "byo", "pya", "pyu", "pyo"],
     hiragana: ["ぎゃ", "ぎゅ", "ぎょ", "じゃ", "じゅ", "じょ", "びゃ", "びゅ", "びょ", "ぴゃ", "ぴゅ", "ぴょ"],
     katakana: ["ギャ", "ギュ", "ギョ", "ジャ", "ジュ", "ジョ", "ビャ", "ビュ", "ビョ", "ピャ", "ピュ", "ピョ"],
+    kind: "combination",
   },
 ];
 
-const allRows = [...rows, ...combinationRows];
-const combinationReadings = new Set(combinationRows.flatMap((row) => row.romaji));
+const allRows = [...rows, ...dakuonRows, ...handakuonRows, ...combinationRows];
 
 const examples: Record<string, [string, string, string]> = {
   a: ["あさ", "asa", "morning"], i: ["いぬ", "inu", "dog"], u: ["うみ", "umi", "sea"], e: ["えき", "eki", "station"], o: ["おちゃ", "ocha", "tea"],
@@ -79,13 +93,13 @@ function buildAlphabet(alphabet: Alphabet): Kana[] {
   let order = 0;
   return allRows.flatMap((row) => row.romaji.map((romaji, index) => {
     const character = row[alphabet][index];
-    const isCombination = combinationReadings.has(romaji);
-    const sample = isCombination
-      ? [character, romaji, "combined kana sound"]
+    const isCombination = row.kind === "combination";
+    const sample = row.kind && row.kind !== "basic"
+      ? [character, romaji, row.kind === "dakuon" ? "voiced kana sound" : row.kind === "handakuon" ? "semi-voiced kana sound" : "combined kana sound"]
       : alphabet === "katakana" ? katakanaExamples[romaji] ?? examples[romaji] : examples[romaji];
     order += 1;
     return {
-      id: `${alphabet}-${romaji}`,
+      id: `${alphabet}-${row.ids?.[index] ?? romaji}`,
       character,
       romaji,
       alphabet,
