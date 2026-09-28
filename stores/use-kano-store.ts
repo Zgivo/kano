@@ -12,6 +12,13 @@ export type KanaProgress = {
   status: "new" | "learning" | "familiar" | "strong" | "mastered";
 };
 
+export type DailyActivity = {
+  studySeconds: number;
+  questions: number;
+  correct: number;
+  xp: number;
+};
+
 export type ProgressSnapshot = {
   name: string;
   xp: number;
@@ -21,6 +28,7 @@ export type ProgressSnapshot = {
   questions: number;
   correct: number;
   studySeconds: number;
+  dailyActivity: Record<string, DailyActivity>;
   progress: Record<string, KanaProgress>;
   onboardingComplete: boolean;
 };
@@ -55,18 +63,49 @@ export const blankProgress = (name = "Learner"): ProgressSnapshot => ({
   questions: 0,
   correct: 0,
   studySeconds: 0,
+  dailyActivity: {},
   progress: {},
   onboardingComplete: false,
 });
 
 const storageKey = (identityKey: string) => `kano-progress-v2:${identityKey}`;
 
+export const localDateKey = (date = new Date()) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const calculateStreak = (activity: Record<string, DailyActivity>, now = new Date()) => {
+  let cursor = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (!(activity[localDateKey(cursor)]?.studySeconds > 0)) cursor.setDate(cursor.getDate() - 1);
+  let streak = 0;
+  while (activity[localDateKey(cursor)]?.studySeconds > 0) {
+    streak += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+};
+
+const normalizeSnapshot = (snapshot: Partial<ProgressSnapshot> | null | undefined, fallbackName = "Learner"): ProgressSnapshot => {
+  const normalized = { ...blankProgress(fallbackName), ...(snapshot ?? {}) };
+  const dailyActivity = normalized.dailyActivity ?? {};
+  const todaySeconds = dailyActivity[localDateKey()]?.studySeconds ?? 0;
+  return {
+    ...normalized,
+    dailyActivity,
+    dailyMinutes: todaySeconds > 0 ? Math.max(1, Math.ceil(todaySeconds / 60)) : 0,
+    streak: calculateStreak(dailyActivity),
+  };
+};
+
 const readLocal = (identityKey: string, fallbackName?: string): ProgressSnapshot => {
   const empty = blankProgress(fallbackName);
   if (typeof window === "undefined") return empty;
   try {
     const saved = window.localStorage.getItem(storageKey(identityKey));
-    return saved ? { ...empty, ...JSON.parse(saved) } : empty;
+    return saved ? normalizeSnapshot(JSON.parse(saved), fallbackName) : empty;
   } catch {
     return empty;
   }
@@ -81,6 +120,7 @@ export const selectProgressSnapshot = (state: KanoState): ProgressSnapshot => ({
   questions: state.questions,
   correct: state.correct,
   studySeconds: state.studySeconds,
+  dailyActivity: state.dailyActivity,
   progress: state.progress,
   onboardingComplete: state.onboardingComplete,
 });
@@ -94,7 +134,7 @@ export const useKanoStore = create<KanoState>()((set) => ({
     identityKey,
     hydrated: true,
   }),
-  hydrate: (snapshot) => set((state) => ({ ...blankProgress(state.name), ...snapshot })),
+  hydrate: (snapshot) => set((state) => normalizeSnapshot(snapshot, state.name)),
   updateAnswer: (id, isCorrect, responseMs) => set((state) => {
     const current = state.progress[id] ?? { mastery: 0, correct: 0, incorrect: 0, unresolvedMistakes: 0, status: "new" as const };
     const correct = current.correct + (isCorrect ? 1 : 0);
@@ -105,19 +145,42 @@ export const useKanoStore = create<KanoState>()((set) => ({
     const change = isCorrect ? 8 + speedBoost : -10;
     const mastery = Math.max(0, Math.min(100, current.mastery + change));
     const addedSeconds = Math.max(1, Math.round(responseMs / 1000));
+    const today = localDateKey();
+    const currentDay = state.dailyActivity[today] ?? { studySeconds: 0, questions: 0, correct: 0, xp: 0 };
+    const dailyActivity = {
+      ...state.dailyActivity,
+      [today]: {
+        studySeconds: currentDay.studySeconds + addedSeconds,
+        questions: currentDay.questions + 1,
+        correct: currentDay.correct + (isCorrect ? 1 : 0),
+        xp: currentDay.xp + (isCorrect ? 5 : 0),
+      },
+    };
     return {
       xp: state.xp + (isCorrect ? 5 : 0),
       questions: state.questions + 1,
       correct: state.correct + (isCorrect ? 1 : 0),
       studySeconds: state.studySeconds + addedSeconds,
-      dailyMinutes: Math.floor((state.studySeconds + addedSeconds) / 60),
+      dailyActivity,
+      dailyMinutes: Math.max(1, Math.ceil(dailyActivity[today].studySeconds / 60)),
+      streak: calculateStreak(dailyActivity),
       progress: { ...state.progress, [id]: { mastery, correct, incorrect, unresolvedMistakes, responseMs, lastReviewed: new Date().toISOString(), status: statusFor(mastery, correct) } },
     };
   }),
   remember: (id) => set((state) => {
     const current = state.progress[id] ?? { mastery: 0, correct: 0, incorrect: 0, unresolvedMistakes: 0, status: "new" as const };
     const mastery = Math.min(100, current.mastery + 12);
-    return { progress: { ...state.progress, [id]: { ...current, mastery, status: statusFor(mastery, current.correct) } } };
+    const addedSeconds = 5;
+    const today = localDateKey();
+    const currentDay = state.dailyActivity[today] ?? { studySeconds: 0, questions: 0, correct: 0, xp: 0 };
+    const dailyActivity = { ...state.dailyActivity, [today]: { ...currentDay, studySeconds: currentDay.studySeconds + addedSeconds } };
+    return {
+      studySeconds: state.studySeconds + addedSeconds,
+      dailyActivity,
+      dailyMinutes: Math.max(1, Math.ceil(dailyActivity[today].studySeconds / 60)),
+      streak: calculateStreak(dailyActivity),
+      progress: { ...state.progress, [id]: { ...current, mastery, lastReviewed: new Date().toISOString(), status: statusFor(mastery, current.correct) } },
+    };
   }),
   setDailyGoal: (dailyGoal) => set({ dailyGoal }),
   setName: (name) => set({ name }),
